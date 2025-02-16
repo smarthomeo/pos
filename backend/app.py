@@ -38,7 +38,7 @@ app = Flask(__name__)
 app.json_encoder = CustomJSONProvider
 
 # Configure CORS
-CORS(app, supports_credentials=True, origins=['http://localhost:5173'])
+CORS(app, supports_credentials=True, origins=[os.getenv('FRONTEND_URL', 'http://localhost:5173')])
 
 # Configure session
 app.config['SECRET_KEY'] = os.getenv('JWT_SECRET', 'your-secret-key')
