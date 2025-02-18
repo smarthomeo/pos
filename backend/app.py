@@ -38,7 +38,11 @@ app = Flask(__name__)
 app.json_encoder = CustomJSONProvider
 
 # Configure CORS
-CORS(app, supports_credentials=True, origins=[os.getenv('FRONTEND_URL', 'http://localhost:5173')])
+CORS(app, 
+     supports_credentials=True, 
+     origins=[os.getenv('FRONTEND_URL', 'http://localhost:5173')],
+     allow_headers=["Content-Type", "Authorization"],
+     methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 # Configure session
 app.config['SECRET_KEY'] = os.getenv('JWT_SECRET', 'your-secret-key')
@@ -50,6 +54,46 @@ Session(app)
 mongo_uri = os.getenv('MONGODB_URI', 'mongodb://localhost:27017/secure_auth_glass')
 mongo_client = MongoClient(mongo_uri)
 db = mongo_client.get_default_database()
+
+# Initialize commission rates if not exists
+def init_commission_rates():
+    if db.commission_rates.count_documents({}) == 0:
+        db.commission_rates.insert_one({
+            'forex_rewards': {
+                'EUR/USD': 100,
+                'GBP/USD': 300,
+                'USD/JPY': 500,
+                'USD/CHF': 600,
+                'AUD/USD': 700,
+                'EUR/GBP': 1000,
+                'EUR/AUD': 1500,
+                'USD/CAD': 2500,
+                'NZD/USD': 5000
+            },
+            'daily_commission': {
+                'level1': 0.10,  # 10% ROI
+                'level2': 0.05,  # 5% ROI
+                'level3': 0.02   # 2% ROI
+            },
+            'created_at': datetime.utcnow(),
+            'updated_at': datetime.utcnow()
+        })
+
+# Call initialization when app starts
+init_commission_rates()
+
+# Forex referral rewards
+FOREX_REFERRAL_REWARDS = {
+    'EUR/USD': 100,
+    'GBP/USD': 300,
+    'USD/JPY': 500,
+    'USD/CHF': 600,
+    'AUD/USD': 700,
+    'EUR/GBP': 1000,
+    'EUR/AUD': 1500,
+    'USD/CAD': 2500,
+    'NZD/USD': 5000
+}
 
 # Authentication decorator
 def login_required(f):
@@ -72,65 +116,147 @@ def calculate_referral_earnings(user_id):
     try:
         print(f"Calculating referral earnings for user: {user_id}")
         
-        # Level 1 earnings (direct referrals) - 10% of their investments immediately
-        level1_referrals = list(db.users.find({'referredBy': ObjectId(user_id)}))
-        level1_earnings = 0
-        level2_earnings = 0
-        level3_earnings = 0
-        
-        print(f"Found {len(level1_referrals)} level 1 referrals")
-        
-        # Calculate Level 1 earnings (10% of direct referrals' investments)
-        for ref in level1_referrals:
-            ref_investments = list(db.investments.find({
-                'userId': ref['_id']
-            }))
-            print(f"User {ref['username']} has {len(ref_investments)} investments")
-            
-            for inv in ref_investments:
-                amount = float(inv.get('amount', 0))
-                level1_earnings += amount * 0.10  # Immediate 10% commission
-                
-            # Level 2 earnings (5% of level 2 referrals' investments)
-            level2_refs = list(db.users.find({'referredBy': ref['_id']}))
-            print(f"User {ref['username']} has {len(level2_refs)} level 2 referrals")
-            
-            for l2_ref in level2_refs:
-                l2_investments = list(db.investments.find({
-                    'userId': l2_ref['_id']
-                }))
-                print(f"Level 2 user {l2_ref['username']} has {len(l2_investments)} investments")
-                
-                for inv in l2_investments:
-                    amount = float(inv.get('amount', 0))
-                    level2_earnings += amount * 0.05  # Immediate 5% commission
-                    
-                # Level 3 earnings (2.5% of level 3 referrals' investments)
-                level3_refs = list(db.users.find({'referredBy': l2_ref['_id']}))
-                print(f"Level 2 user {l2_ref['username']} has {len(level3_refs)} level 3 referrals")
-                
-                for l3_ref in level3_refs:
-                    l3_investments = list(db.investments.find({
-                        'userId': l3_ref['_id']
-                    }))
-                    print(f"Level 3 user {l3_ref['username']} has {len(l3_investments)} investments")
-                    
-                    for inv in l3_investments:
-                        amount = float(inv.get('amount', 0))
-                        level3_earnings += amount * 0.025  # Immediate 2.5% commission
-        
-        total_earnings = level1_earnings + level2_earnings + level3_earnings
-        print(f"Total earnings breakdown: L1={level1_earnings}, L2={level2_earnings}, L3={level3_earnings}, Total={total_earnings}")
+        # Get all referral rewards (one-time rewards + daily commissions)
+        total_rewards = db.referral_history.aggregate([
+            {'$match': {'referrerId': ObjectId(user_id)}},
+            {'$group': {
+                '_id': None,
+                'total': {'$sum': '$amount'}
+            }}
+        ]).next()
         
         return {
-            'level1': round(level1_earnings, 2),
-            'level2': round(level2_earnings, 2),
-            'level3': round(level3_earnings, 2),
-            'total': round(total_earnings, 2)
+            'total': round(total_rewards.get('total', 0), 2)
         }
     except Exception as e:
         print(f"Error calculating referral earnings: {str(e)}")
-        return {'level1': 0, 'level2': 0, 'level3': 0, 'total': 0}
+        return {'total': 0}
+
+def calculate_daily_referral_commissions():
+    """Calculate and distribute daily commissions based on referred users' investment earnings"""
+    try:
+        # Get current commission rates
+        commission_rates = db.commission_rates.find_one({}, sort=[('created_at', -1)])
+        if not commission_rates:
+            print("No commission rates found")
+            return
+            
+        daily_rates = commission_rates['daily_commission']
+        
+        # Get yesterday's date (UTC)
+        yesterday = datetime.utcnow() - timedelta(days=1)
+        yesterday_start = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday_end = yesterday_start + timedelta(days=1)
+        
+        # Track processed commissions to avoid duplicates
+        processed_commissions = set()
+        
+        # Get all active investments from yesterday
+        active_investments = db.investments.find({
+            'status': 'active',
+            'createdAt': {'$lt': yesterday_end}
+        })
+        
+        for investment in active_investments:
+            user_id = investment['userId']
+            amount = investment['amount']
+            daily_roi = investment.get('dailyRoi', 0)
+            daily_roi_earnings = amount * (daily_roi / 100)
+            
+            # Get user's referral chain
+            user = db.users.find_one({'_id': user_id})
+            if not user or not user.get('referredBy'):
+                continue
+                
+            # Process Level 1 (direct referrer)
+            level1_referrer_id = user['referredBy']
+            commission_key = f"{str(level1_referrer_id)}_{str(user_id)}_{yesterday.date()}"
+            
+            if commission_key not in processed_commissions:
+                level1_commission = daily_roi_earnings * daily_rates['level1']
+                
+                # Record commission with historical rate
+                db.referral_history.insert_one({
+                    'referrerId': level1_referrer_id,
+                    'referredId': user_id,
+                    'level': 1,
+                    'type': 'daily_commission',
+                    'amount': level1_commission,
+                    'rate': daily_rates['level1'],
+                    'baseAmount': daily_roi_earnings,
+                    'date': yesterday_start,
+                    'createdAt': datetime.utcnow()
+                })
+                
+                # Update user's earnings
+                db.users.update_one(
+                    {'_id': level1_referrer_id},
+                    {'$inc': {'referralEarnings': level1_commission}}
+                )
+                
+                processed_commissions.add(commission_key)
+                
+                # Process Level 2
+                level1_user = db.users.find_one({'_id': level1_referrer_id})
+                if level1_user and level1_user.get('referredBy'):
+                    level2_referrer_id = level1_user['referredBy']
+                    level2_commission_key = f"{str(level2_referrer_id)}_{str(user_id)}_{yesterday.date()}"
+                    
+                    if level2_commission_key not in processed_commissions:
+                        level2_commission = daily_roi_earnings * daily_rates['level2']
+                        
+                        db.referral_history.insert_one({
+                            'referrerId': level2_referrer_id,
+                            'referredId': user_id,
+                            'level': 2,
+                            'type': 'daily_commission',
+                            'amount': level2_commission,
+                            'rate': daily_rates['level2'],
+                            'baseAmount': daily_roi_earnings,
+                            'date': yesterday_start,
+                            'createdAt': datetime.utcnow()
+                        })
+                        
+                        db.users.update_one(
+                            {'_id': level2_referrer_id},
+                            {'$inc': {'referralEarnings': level2_commission}}
+                        )
+                        
+                        processed_commissions.add(level2_commission_key)
+                        
+                        # Process Level 3
+                        level2_user = db.users.find_one({'_id': level2_referrer_id})
+                        if level2_user and level2_user.get('referredBy'):
+                            level3_referrer_id = level2_user['referredBy']
+                            level3_commission_key = f"{str(level3_referrer_id)}_{str(user_id)}_{yesterday.date()}"
+                            
+                            if level3_commission_key not in processed_commissions:
+                                level3_commission = daily_roi_earnings * daily_rates['level3']
+                                
+                                db.referral_history.insert_one({
+                                    'referrerId': level3_referrer_id,
+                                    'referredId': user_id,
+                                    'level': 3,
+                                    'type': 'daily_commission',
+                                    'amount': level3_commission,
+                                    'rate': daily_rates['level3'],
+                                    'baseAmount': daily_roi_earnings,
+                                    'date': yesterday_start,
+                                    'createdAt': datetime.utcnow()
+                                })
+                                
+                                db.users.update_one(
+                                    {'_id': level3_referrer_id},
+                                    {'$inc': {'referralEarnings': level3_commission}}
+                                )
+                                
+                                processed_commissions.add(level3_commission_key)
+        
+        print(f"Daily commission calculation completed for {yesterday.date()}")
+        
+    except Exception as e:
+        print(f"Error calculating daily commissions: {str(e)}")
+        raise e
 
 # Auth routes
 @app.route('/api/auth/register', methods=['POST'])
@@ -443,24 +569,20 @@ def create_investment():
         if amount > user.get('balance', 0):
             return jsonify({'error': 'Insufficient balance'}), 400
 
+        forex_pair = data['pair']
+
         # Create the investment
         current_time = datetime.utcnow()
         investment = {
             'userId': ObjectId(user_id),
-            'user_id': ObjectId(user_id),  # Add both formats for compatibility
-            'forexPair': data['pair'],
-            'pair': data['pair'],  # Add both formats for compatibility
+            'forexPair': forex_pair,
             'amount': amount,
             'dailyROI': float(data['dailyROI']),
-            'daily_roi': float(data['dailyROI']),  # Add both formats for compatibility
             'entryPrice': 1.0000,
-            'entry_price': 1.0000,  # Add both formats for compatibility
             'currentPrice': 1.0000,
-            'current_price': 1.0000,  # Add both formats for compatibility
             'status': 'active',
             'profit': 0,
-            'createdAt': current_time,
-            'created_at': current_time  # Add both formats for compatibility
+            'createdAt': current_time
         }
 
         print(f"Inserting investment: {investment}")
@@ -473,41 +595,41 @@ def create_investment():
             {'$inc': {'balance': -amount}}
         )
 
-        # Calculate and credit referral earnings
+        # Calculate and credit referral rewards
         if user.get('referredBy'):
             referrer = db.users.find_one({'_id': user['referredBy']})
             if referrer:
-                # Credit 10% to direct referrer
-                referral_bonus = amount * 0.10
-                db.users.update_one(
-                    {'_id': referrer['_id']},
-                    {'$inc': {'balance': referral_bonus}}
-                )
-                print(f"Credited {referral_bonus} to referrer {referrer['_id']} for investment")
+                # One-time reward for the specific forex pair
+                one_time_reward = FOREX_REFERRAL_REWARDS.get(forex_pair, 0)
+                
+                # Check if this is the first investment for this pair
+                existing_investments = db.investments.find_one({
+                    'userId': ObjectId(user_id),
+                    'forexPair': forex_pair,
+                    '_id': {'$ne': result.inserted_id}  # Exclude the current investment
+                })
+                
+                if not existing_investments and one_time_reward > 0:
+                    # Credit one-time reward to direct referrer
+                    db.users.update_one(
+                        {'_id': referrer['_id']},
+                        {'$inc': {'balance': one_time_reward}}
+                    )
+                    print(f"Credited one-time reward {one_time_reward} to referrer {referrer['_id']} for {forex_pair}")
+                    
+                    # Record the reward in referral history
+                    db.referral_history.insert_one({
+                        'referrerId': referrer['_id'],
+                        'userId': ObjectId(user_id),
+                        'type': 'one_time_reward',
+                        'forexPair': forex_pair,
+                        'amount': one_time_reward,
+                        'createdAt': current_time
+                    })
+                    print(f"Recorded one-time reward: {one_time_reward} for {forex_pair}")
 
-                # Check for level 2 referrer
-                if referrer.get('referredBy'):
-                    l2_referrer = db.users.find_one({'_id': referrer['referredBy']})
-                    if l2_referrer:
-                        # Credit 5% to level 2 referrer
-                        l2_bonus = amount * 0.05
-                        db.users.update_one(
-                            {'_id': l2_referrer['_id']},
-                            {'$inc': {'balance': l2_bonus}}
-                        )
-                        print(f"Credited {l2_bonus} to L2 referrer {l2_referrer['_id']} for investment")
-
-                        # Check for level 3 referrer
-                        if l2_referrer.get('referredBy'):
-                            l3_referrer = db.users.find_one({'_id': l2_referrer['referredBy']})
-                            if l3_referrer:
-                                # Credit 2.5% to level 3 referrer
-                                l3_bonus = amount * 0.025
-                                db.users.update_one(
-                                    {'_id': l3_referrer['_id']},
-                                    {'$inc': {'balance': l3_bonus}}
-                                )
-                                print(f"Credited {l3_bonus} to L3 referrer {l3_referrer['_id']} for investment")
+                # Daily commission calculation will be handled by a separate cron job
+                # that calculates earnings based on the daily ROI of referred users' investments
 
         # Get updated user balance
         updated_user = db.users.find_one({'_id': ObjectId(user_id)})
@@ -639,61 +761,124 @@ def get_referral_stats():
 @login_required
 def get_referral_history():
     try:
-        user_id = session['user_id']
-        print(f"Getting referral history for user: {user_id}")
-        
-        # Get all direct referrals with their details
+        user_id = session.get('user_id')
+        user = db.users.find_one({'_id': ObjectId(user_id)})
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        # Get all referrals (direct and indirect)
         referrals = []
-        direct_referrals = list(db.users.find(
-            {'referredBy': ObjectId(user_id)},
-            {'_id': 1, 'username': 1, 'phone': 1, 'createdAt': 1, 'isActive': 1}
-        ))
         
-        print(f"Found {len(direct_referrals)} direct referrals")
-        
-        for ref in direct_referrals:
-            # Count this referral's referrals (your level 2)
-            level2_count = db.users.count_documents({'referredBy': ref['_id']})
+        # Get level 1 (direct) referrals
+        level1_refs = list(db.users.find({'referredBy': ObjectId(user_id)}))
+        for ref in level1_refs:
+            # Get earnings for this referral
+            one_time_rewards = sum(reward.get('amount', 0) 
+                for reward in db.referral_history.find({
+                    'referrerId': ObjectId(user_id),
+                    'userId': ref['_id'],  
+                    'type': 'one_time_reward'
+                })
+            )
             
-            # Calculate earnings from this referral's investments
-            ref_investments = list(db.investments.find({
-                'userId': ref['_id']
-            }))
+            daily_commissions = sum(reward.get('amount', 0)
+                for reward in db.referral_history.find({
+                    'referrerId': ObjectId(user_id),
+                    'userId': ref['_id'],  
+                    'type': 'daily_commission'
+                })
+            )
             
-            earnings = 0
-            for inv in ref_investments:
-                amount = float(inv.get('amount', 0))
-                earnings += amount * 0.10  # Immediate 10% commission
+            referrals.append({
+                '_id': str(ref['_id']),
+                'username': ref.get('username', ''),
+                'phone': ref.get('phone', ''),
+                'joinedAt': ref['createdAt'].isoformat() if isinstance(ref.get('createdAt'), datetime) else ref.get('createdAt', ''),
+                'isActive': ref.get('isActive', False),
+                'referralCount': db.users.count_documents({'referredBy': ref['_id']}),
+                'level': 1,
+                'earnings': {
+                    'oneTimeRewards': float(one_time_rewards),
+                    'dailyCommissions': float(daily_commissions),
+                    'total': float(one_time_rewards + daily_commissions)
+                }
+            })
             
-            # Add level 2 earnings (5% of their referrals' investments)
+            # Get level 2 referrals
             level2_refs = list(db.users.find({'referredBy': ref['_id']}))
             for l2_ref in level2_refs:
-                l2_investments = list(db.investments.find({
-                    'userId': l2_ref['_id']
-                }))
-                for inv in l2_investments:
-                    amount = float(inv.get('amount', 0))
-                    earnings += amount * 0.05  # Immediate 5% commission
-            
-            referral = {
-                'id': str(ref['_id']),
-                'username': ref['username'],
-                'phone': ref['phone'],
-                'joinedAt': ref['createdAt'].isoformat() if isinstance(ref['createdAt'], datetime) else ref['createdAt'],
-                'isActive': ref.get('isActive', True),
-                'referralCount': level2_count,
-                'earnings': round(earnings, 2)
-            }
-            referrals.append(referral)
-        
-        # Sort referrals by earnings, highest first
-        referrals.sort(key=lambda x: x['earnings'], reverse=True)
-        
-        print(f"Returning {len(referrals)} formatted referrals")
+                l2_one_time = sum(reward.get('amount', 0)
+                    for reward in db.referral_history.find({
+                        'referrerId': ObjectId(user_id),
+                        'userId': l2_ref['_id'],  
+                        'type': 'one_time_reward'
+                    })
+                )
+                
+                l2_daily = sum(reward.get('amount', 0)
+                    for reward in db.referral_history.find({
+                        'referrerId': ObjectId(user_id),
+                        'userId': l2_ref['_id'],  
+                        'type': 'daily_commission'
+                    })
+                )
+                
+                referrals.append({
+                    '_id': str(l2_ref['_id']),
+                    'username': l2_ref.get('username', ''),
+                    'phone': l2_ref.get('phone', ''),
+                    'joinedAt': l2_ref['createdAt'].isoformat() if isinstance(l2_ref.get('createdAt'), datetime) else l2_ref.get('createdAt', ''),
+                    'isActive': l2_ref.get('isActive', False),
+                    'referralCount': db.users.count_documents({'referredBy': l2_ref['_id']}),
+                    'level': 2,
+                    'earnings': {
+                        'oneTimeRewards': float(l2_one_time),
+                        'dailyCommissions': float(l2_daily),
+                        'total': float(l2_one_time + l2_daily)
+                    }
+                })
+                
+                # Get level 3 referrals
+                level3_refs = list(db.users.find({'referredBy': l2_ref['_id']}))
+                for l3_ref in level3_refs:
+                    l3_one_time = sum(reward.get('amount', 0)
+                        for reward in db.referral_history.find({
+                            'referrerId': ObjectId(user_id),
+                            'userId': l3_ref['_id'],  
+                            'type': 'one_time_reward'
+                        })
+                    )
+                    
+                    l3_daily = sum(reward.get('amount', 0)
+                        for reward in db.referral_history.find({
+                            'referrerId': ObjectId(user_id),
+                            'userId': l3_ref['_id'],  
+                            'type': 'daily_commission'
+                        })
+                    )
+                    
+                    referrals.append({
+                        '_id': str(l3_ref['_id']),
+                        'username': l3_ref.get('username', ''),
+                        'phone': l3_ref.get('phone', ''),
+                        'joinedAt': l3_ref['createdAt'].isoformat() if isinstance(l3_ref.get('createdAt'), datetime) else l3_ref.get('createdAt', ''),
+                        'isActive': l3_ref.get('isActive', False),
+                        'referralCount': db.users.count_documents({'referredBy': l3_ref['_id']}),
+                        'level': 3,
+                        'earnings': {
+                            'oneTimeRewards': float(l3_one_time),
+                            'dailyCommissions': float(l3_daily),
+                            'total': float(l3_one_time + l3_daily)
+                        }
+                    })
+
         return jsonify({'referrals': referrals})
+        
     except Exception as e:
         print(f"Get referral history error: {str(e)}")
         return jsonify({'error': 'Failed to fetch referral history'}), 500
 
 if __name__ == '__main__':
+    from scheduler import start_scheduler
+    scheduler = start_scheduler()
     app.run(port=5000)

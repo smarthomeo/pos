@@ -11,6 +11,7 @@ interface ForexPair {
   minInvestment: number;
   flag1: string;
   flag2: string;
+  disabled?: boolean;
 }
 
 const FOREX_PAIRS: ForexPair[] = [
@@ -19,7 +20,7 @@ const FOREX_PAIRS: ForexPair[] = [
     price: 1.0921,
     previousPrice: 1.0916,
     dailyROI: 5.0,
-    minInvestment: 1000,
+    minInvestment: 600,
     flag1: '/images/eur.jpg',
     flag2: '/images/usd.jpg'
   },
@@ -27,7 +28,7 @@ const FOREX_PAIRS: ForexPair[] = [
     pair: 'GBP/USD',
     price: 1.2650,
     previousPrice: 1.2645,
-    dailyROI: 5.5,
+    dailyROI: 5.3,
     minInvestment: 1500,
     flag1: '/images/gbp.jpg',
     flag2: '/images/usd.jpg'
@@ -36,8 +37,8 @@ const FOREX_PAIRS: ForexPair[] = [
     pair: 'USD/JPY',
     price: 148.35,
     previousPrice: 148.40,
-    dailyROI: 6.0,
-    minInvestment: 2000,
+    dailyROI: 5.8,
+    minInvestment: 3000,
     flag1: '/images/usd.jpg',
     flag2: '/images/jpy.jpg'
   },
@@ -45,8 +46,8 @@ const FOREX_PAIRS: ForexPair[] = [
     pair: 'USD/CHF',
     price: 0.8650,
     previousPrice: 0.8645,
-    dailyROI: 6.5,
-    minInvestment: 3000,
+    dailyROI: 6.0,
+    minInvestment: 5000,
     flag1: '/images/usd.jpg',
     flag2: '/images/chf.jpg'
   },
@@ -54,8 +55,8 @@ const FOREX_PAIRS: ForexPair[] = [
     pair: 'AUD/USD',
     price: 0.6580,
     previousPrice: 0.6575,
-    dailyROI: 7.0,
-    minInvestment: 4000,
+    dailyROI: 6.3,
+    minInvestment: 8000,
     flag1: '/images/aud.jpg',
     flag2: '/images/usd.jpg' 
   },
@@ -63,10 +64,39 @@ const FOREX_PAIRS: ForexPair[] = [
     pair: 'EUR/GBP',
     price: 0.8635,
     previousPrice: 0.8630,
-    dailyROI: 7.5,
-    minInvestment: 5000,
+    dailyROI: 6.5,
+    minInvestment: 15000,
     flag1: '/images/eur.jpg',
     flag2: '/images/gbp.jpg'
+  },
+  {
+    pair: 'EUR/AUD',
+    price: 1.6580,
+    previousPrice: 1.6575,
+    dailyROI: 7.0,
+    minInvestment: 20000,
+    flag1: '/images/eur.jpg',
+    flag2: '/images/aud.jpg'
+  },
+  {
+    pair: 'USD/CAD',
+    price: 1.3450,
+    previousPrice: 1.3445,
+    dailyROI: 7.4,
+    minInvestment: 40000,
+    flag1: '/images/usd.jpg',
+    flag2: '/images/cad.jpg',
+    disabled: true
+  },
+  {
+    pair: 'NZD/USD',
+    price: 0.6120,
+    previousPrice: 0.6115,
+    dailyROI: 8.0,
+    minInvestment: 100000,
+    flag1: '/images/nzd.jpg',
+    flag2: '/images/usd.jpg',
+    disabled: true
   }
 ];
 

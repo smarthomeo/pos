@@ -14,6 +14,7 @@ interface ForexPairProps {
 
   flag1: string;
   flag2: string;
+  disabled?: boolean;
 }
 
 export default function ForexPairCard({
@@ -25,6 +26,7 @@ export default function ForexPairCard({
 
   flag1,
   flag2,
+  disabled = false,
 }: ForexPairProps) {
   const [showInvestModal, setShowInvestModal] = useState(false);
   const priceChange = price - previousPrice;
@@ -88,9 +90,9 @@ export default function ForexPairCard({
             <Button 
               className="w-full" 
               onClick={() => setShowInvestModal(true)}
-
+              disabled={disabled}
             >
-              Invest Now
+              {disabled ? "Coming Soon" : "Invest Now"}
             </Button>
           </div>
         </CardContent>

@@ -28,9 +28,6 @@ interface ReferralStats {
     total: number;
   };
   earnings: {
-    level1: number;
-    level2: number;
-    level3: number;
     total: number;
   };
 }
@@ -140,27 +137,18 @@ export function ReferralDashboard() {
           <CardDescription className="text-sm">Total Referrals: {stats?.counts.total || 0}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="p-3 sm:p-4 border rounded-lg">
               <h4 className="text-xs sm:text-sm font-medium">Direct Referrals (Level 1)</h4>
               <p className="text-xl sm:text-2xl font-bold mt-1">{stats?.counts.level1 || 0}</p>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                KES {stats?.earnings.level1.toLocaleString() || 0} earned
-              </p>
             </div>
             <div className="p-3 sm:p-4 border rounded-lg">
               <h4 className="text-xs sm:text-sm font-medium">Level 2 Referrals</h4>
               <p className="text-xl sm:text-2xl font-bold mt-1">{stats?.counts.level2 || 0}</p>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                KES {stats?.earnings.level2.toLocaleString() || 0} earned
-              </p>
             </div>
             <div className="p-3 sm:p-4 border rounded-lg">
               <h4 className="text-xs sm:text-sm font-medium">Level 3 Referrals</h4>
               <p className="text-xl sm:text-2xl font-bold mt-1">{stats?.counts.level3 || 0}</p>
-              <p className="text-xs sm:text-sm text-muted-foreground mt-1">
-                KES {stats?.earnings.level3.toLocaleString() || 0} earned
-              </p>
             </div>
           </div>
 
@@ -169,6 +157,9 @@ export function ReferralDashboard() {
               <div>
                 <h4 className="font-medium">Total Earnings</h4>
                 <p className="text-2xl font-bold mt-1">KES {stats?.earnings.total.toLocaleString() || 0}</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Combined earnings from one-time rewards and daily commissions
+                </p>
               </div>
               <div className="flex gap-2">
                 <TooltipProvider>
