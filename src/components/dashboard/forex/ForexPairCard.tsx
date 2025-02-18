@@ -15,6 +15,7 @@ interface ForexPairProps {
   flag1: string;
   flag2: string;
   disabled?: boolean;
+  onInvestmentCreated?: (investment: any) => void;
 }
 
 export default function ForexPairCard({
@@ -27,6 +28,7 @@ export default function ForexPairCard({
   flag1,
   flag2,
   disabled = false,
+  onInvestmentCreated,
 }: ForexPairProps) {
   const [showInvestModal, setShowInvestModal] = useState(false);
   const priceChange = price - previousPrice;
@@ -105,6 +107,7 @@ export default function ForexPairCard({
         price={price}
         dailyROI={dailyROI}
         minInvestment={minInvestment}
+        onInvestmentCreated={onInvestmentCreated}
       />
     </>
   );

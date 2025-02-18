@@ -37,10 +37,18 @@ interface Investment {
   status: string;
 }
 
+interface InvestmentHistory {
+  date: string;
+  amount: number;
+  type: string;
+  balance: number;
+}
+
 export function Dashboard() {
   const [userData, setUserData] = useState<UserData | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [investments, setInvestments] = useState<Investment[]>([]);
+  const [investmentHistory, setInvestmentHistory] = useState<InvestmentHistory[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const { toast } = useToast();
@@ -50,19 +58,17 @@ export function Dashboard() {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        console.log('Fetching dashboard data...');
-        
-        const [userResponse, transactionsResponse, investmentsResponse] = await Promise.all([
+        const [userResponse, transactionsResponse, investmentsResponse, historyResponse] = await Promise.all([
           userApi.getProfile(),
           transactionApi.getTransactions(),
           investmentApi.getInvestments(),
+          investmentApi.getHistory()
         ]);
 
-        console.log('Investments response:', investmentsResponse);
-        
         setUserData(userResponse.user);
         setTransactions(transactionsResponse.transactions || []);
-        setInvestments(investmentsResponse.investments || []);  
+        setInvestments(investmentsResponse.investments || []);
+        setInvestmentHistory(historyResponse.history || []);
       } catch (error: any) {
         console.error('Dashboard data fetch error:', error);
         toast({
@@ -76,7 +82,7 @@ export function Dashboard() {
     };
 
     fetchData();
-  }, []);
+  }, [toast]);
 
   const handleClosePosition = async (investmentId: string) => {
     try {
@@ -178,6 +184,15 @@ export function Dashboard() {
               KES {0}
             </p>
           </div>
+        </div>
+
+        {/* Portfolio Chart */}
+        <div className="bg-white rounded-lg shadow">
+          <PortfolioChart 
+            investments={investments} 
+            history={investmentHistory}
+            isLoading={isLoading} 
+          />
         </div>
 
         {/* Portfolio Section */}

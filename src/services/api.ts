@@ -85,34 +85,23 @@ export const transactionApi = {
 
 // Investment API
 export const investmentApi = {
-  createInvestment: async (data: { pair: string; amount: number; dailyROI: number }) => {
-    try {
-      const response = await fetchApi('/api/investments', {
-        method: 'POST',
-        body: data,
-      });
-      return response;
-    } catch (error) {
-      console.error('Error creating investment:', error);
-      throw error;
-    }
+  createInvestment(data: { pair: string; amount: number; dailyROI: number }) {
+    return fetchApi('/api/investments', {
+      method: 'POST',
+      body: data,
+    });
   },
-  
-  getInvestments: async () => {
-    try {
-      const response = await fetchApi('/api/investments');
-      return response;
-    } catch (error) {
-      console.error('Error fetching investments:', error);
-      throw error;
-    }
+
+  getInvestments() {
+    return fetchApi('/api/investments');
   },
-  
-  getEarnings: async () => {
-    console.log('Fetching earnings...');
-    const response = await fetchApi('/api/investments/earnings');
-    console.log('Earnings response:', response);
-    return response;
+
+  getEarnings() {
+    return fetchApi('/api/investments/earnings');
+  },
+
+  getHistory() {
+    return fetchApi('/api/investments/history');
   },
 };
 

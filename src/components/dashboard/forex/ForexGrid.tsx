@@ -102,7 +102,30 @@ const FOREX_PAIRS: ForexPair[] = [
 
 export default function ForexGrid() {
   const { toast } = useToast();
+  const [investments, setInvestments] = useState<any[]>([]);
   const [forexPairs, setForexPairs] = useState<ForexPair[]>(FOREX_PAIRS);
+
+  useEffect(() => {
+    const fetchInvestments = async () => {
+      try {
+        const response = await investmentApi.getInvestments();
+        setInvestments(response.investments || []);
+      } catch (error) {
+        console.error('Error fetching investments:', error);
+      }
+    };
+
+    fetchInvestments();
+  }, []);
+
+  const handleInvestmentCreated = (newInvestment: any) => {
+    setInvestments((prev) => [newInvestment, ...prev]);
+    toast({
+      title: "Investment Created",
+      description: `Successfully invested in ${newInvestment.forexPair}`,
+      variant: "success",
+    });
+  };
 
   // In a real app, you would fetch real-time forex data here
   useEffect(() => {
@@ -120,11 +143,12 @@ export default function ForexGrid() {
   }, []);
 
   return (
-    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {forexPairs.map((pair) => (
         <ForexPairCard
           key={pair.pair}
           {...pair}
+          onInvestmentCreated={handleInvestmentCreated}
         />
       ))}
     </div>

@@ -9,15 +9,25 @@ interface Investment {
   entryPrice: number;
   currentPrice: number;
   profit: number;
+  dailyROI: number;
   createdAt: string;
+  lastProfitUpdate: string;
+}
+
+interface InvestmentHistory {
+  date: string;
+  amount: number;
+  type: string;
+  balance: number;
 }
 
 interface PortfolioChartProps {
   investments?: Investment[];
+  history?: InvestmentHistory[];
   isLoading?: boolean;
 }
 
-function PortfolioChart({ investments = [], isLoading = false }: PortfolioChartProps) {
+function PortfolioChart({ investments = [], history = [], isLoading = false }: PortfolioChartProps) {
   const formatCurrency = (value: number) => {
     return value.toLocaleString('en-KE', {
       style: 'currency',
@@ -49,106 +59,120 @@ function PortfolioChart({ investments = [], isLoading = false }: PortfolioChartP
       if (isNaN(date.getTime())) return 'N/A';
 
       const options: Intl.DateTimeFormatOptions = {
-        timeZone: 'Africa/Nairobi',
-        ...(includeTime ? {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        ...(includeTime && {
           hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        } : {
-          month: 'short',
-          day: 'numeric'
+          minute: '2-digit'
         })
       };
 
-      return new Intl.DateTimeFormat('en-KE', options).format(date);
+      return new Intl.DateTimeFormat('en-US', options).format(date);
     } catch (error) {
-      console.error('Date formatting error:', error);
+      console.error('Error formatting date:', error);
       return 'N/A';
     }
   };
 
-  // Transform investment data for the chart
-  const chartData = investments.map(inv => ({
-    date: inv.createdAt,
-    formattedDate: formatDate(inv.createdAt),
-    value: inv.amount + inv.profit,
-    profit: inv.profit
-  }));
+  const isWeekend = (date: Date) => {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  };
 
-  const totalValue = investments.reduce((sum, inv) => sum + inv.amount + inv.profit, 0);
+  const processChartData = () => {
+    if (!history.length) return [];
+
+    // Group history by date
+    const dailyData = history.reduce((acc: { [key: string]: any }, item) => {
+      const date = item.date;
+      if (!acc[date]) {
+        acc[date] = {
+          date,
+          earnings: 0,
+          balance: item.balance
+        };
+      }
+      if (item.type === 'roi_earning') {
+        acc[date].earnings += item.amount;
+      }
+      return acc;
+    }, {});
+
+    // Convert to array and sort by date
+    const chartData = Object.values(dailyData)
+      .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .map((item: any) => ({
+        ...item,
+        date: formatDate(item.date),
+        isWeekend: isWeekend(new Date(item.date))
+      }));
+
+    return chartData;
+  };
+
+  const chartData = processChartData();
+  const totalInvestment = investments.reduce((sum, inv) => sum + inv.amount, 0);
   const totalProfit = investments.reduce((sum, inv) => sum + inv.profit, 0);
+  const averageROI = investments.length 
+    ? (investments.reduce((sum, inv) => sum + inv.dailyROI, 0) / investments.length).toFixed(2)
+    : '0.00';
 
   return (
     <Card className="col-span-3">
       <CardHeader>
-        <CardTitle className="text-lg sm:text-xl">Portfolio Performance</CardTitle>
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 sm:gap-0">
+        <CardTitle>Portfolio Performance</CardTitle>
+        <div className="grid grid-cols-3 gap-4 text-sm">
           <div>
-            <p className="text-xs sm:text-sm text-muted-foreground">Total Value</p>
-            <p className="text-lg sm:text-2xl font-bold">{formatCurrency(totalValue)}</p>
+            <p className="text-muted-foreground">Total Investment</p>
+            <p className="text-xl font-bold">{formatCurrency(totalInvestment)}</p>
           </div>
           <div>
-            <p className="text-xs sm:text-sm text-muted-foreground">Total Profit/Loss</p>
-            <p className={`text-lg sm:text-2xl font-bold ${totalProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-              {formatCurrency(totalProfit)}
-            </p>
+            <p className="text-muted-foreground">Total Profit</p>
+            <p className="text-xl font-bold text-green-600">{formatCurrency(totalProfit)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Average Daily ROI</p>
+            <p className="text-xl font-bold">{averageROI}%</p>
           </div>
         </div>
       </CardHeader>
-      <CardContent className="h-[250px] sm:h-[300px] overflow-hidden">
-        {investments.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-center p-4">
-            <p className="text-sm sm:text-base text-muted-foreground">No investments yet</p>
-            <p className="text-xs sm:text-sm text-muted-foreground mt-2">Start investing to see your portfolio performance</p>
-          </div>
-        ) : (
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart 
-              data={chartData}
-              margin={{ top: 5, right: 5, left: 0, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="date"
-                tickFormatter={(value) => formatDate(value)}
-                tick={{ fontSize: 12 }}
-                interval="preserveStartEnd"
-              />
-              <YAxis 
-                tickFormatter={(value) => formatCurrency(value)}
-                tick={{ fontSize: 12 }}
-                width={60}
-              />
-              <Tooltip 
-                formatter={(value: number) => [formatCurrency(value), 'Value']}
-                labelFormatter={(label) => {
-                  if (typeof label === 'string') {
-                    return formatDate(label, true);
-                  }
-                  return 'N/A';
-                }}
-                contentStyle={{
-                  fontSize: '12px',
-                  padding: '8px',
-                  background: 'rgba(255, 255, 255, 0.95)',
-                  border: '1px solid #ccc',
-                  borderRadius: '4px'
-                }}
-              />
-              <Line 
-                type="monotone"
-                dataKey="value"
-                stroke="#2563eb"
-                strokeWidth={2}
-                dot={false}
-                activeDot={{ r: 6 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+      <CardContent>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis 
+              dataKey="date" 
+              tick={{ fontSize: 12 }}
+            />
+            <YAxis 
+              tick={{ fontSize: 12 }}
+              tickFormatter={(value) => formatCurrency(value)}
+            />
+            <Tooltip
+              formatter={(value: any) => formatCurrency(Number(value))}
+              labelFormatter={(label) => `Date: ${label}`}
+              contentStyle={{ backgroundColor: '#fff', borderRadius: '8px' }}
+            />
+            <Line
+              type="monotone"
+              dataKey="balance"
+              name="Portfolio Value"
+              stroke="#2563eb"
+              strokeWidth={2}
+              dot={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="earnings"
+              name="Daily Earnings"
+              stroke="#16a34a"
+              strokeWidth={2}
+              dot={false}
+              strokeDasharray={({ isWeekend }) => isWeekend ? "3 3" : "0"}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </CardContent>
     </Card>
   );

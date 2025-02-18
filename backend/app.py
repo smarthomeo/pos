@@ -258,6 +258,77 @@ def calculate_daily_referral_commissions():
         print(f"Error calculating daily commissions: {str(e)}")
         raise e
 
+def calculate_daily_roi_earnings():
+    """Calculate and distribute daily ROI earnings for all active investments (weekdays only)"""
+    try:
+        current_time = datetime.utcnow()
+        
+        # Check if it's a weekend (5 = Saturday, 6 = Sunday)
+        if current_time.weekday() in [5, 6]:
+            print(f"Skipping ROI calculation for {current_time.date()} as it's a weekend")
+            return
+            
+        print(f"Starting daily ROI calculation for {current_time.date()}")
+        
+        # Get all active investments
+        active_investments = list(db.investments.find({'status': 'active'}))
+        print(f"Processing {len(active_investments)} active investments")
+        
+        for investment in active_investments:
+            try:
+                # Get investment details
+                user_id = investment['userId']
+                amount = float(investment.get('amount', 0))
+                daily_roi = float(investment.get('dailyROI', 0))
+                current_profit = float(investment.get('profit', 0))
+                
+                # Calculate today's earnings
+                daily_earnings = amount * (daily_roi / 100)
+                new_profit = current_profit + daily_earnings
+                
+                print(f"Investment {investment['_id']}: Amount={amount}, ROI={daily_roi}%, Earnings={daily_earnings}")
+                
+                # Update investment profit
+                db.investments.update_one(
+                    {'_id': investment['_id']},
+                    {
+                        '$set': {
+                            'profit': new_profit,
+                            'lastProfitUpdate': current_time
+                        }
+                    }
+                )
+                
+                # Add to user's balance
+                db.users.update_one(
+                    {'_id': user_id},
+                    {'$inc': {'balance': daily_earnings}}
+                )
+                
+                # Record the earnings in history
+                db.investment_history.insert_one({
+                    'investmentId': investment['_id'],
+                    'userId': user_id,
+                    'type': 'roi_earning',
+                    'amount': daily_earnings,
+                    'date': current_time.date().isoformat(),
+                    'createdAt': current_time,
+                    'balance': new_profit
+                })
+                
+                print(f"Credited {daily_earnings} to user {user_id}, new investment profit: {new_profit}")
+                
+            except Exception as inv_error:
+                print(f"Error processing investment {investment.get('_id')}: {str(inv_error)}")
+                continue
+        
+        print(f"Daily ROI calculation completed for {current_time.date()}")
+        return True
+        
+    except Exception as e:
+        print(f"Error calculating daily ROI: {str(e)}")
+        return False
+
 # Auth routes
 @app.route('/api/auth/register', methods=['POST'])
 def register():
@@ -707,6 +778,33 @@ def close_investment(investment_id):
     except Exception as e:
         print(f"Close investment error: {str(e)}")
         return jsonify({'error': 'Failed to close investment'}), 500
+
+@app.route('/api/investments/history', methods=['GET'])
+@login_required
+def get_investment_history():
+    try:
+        user_id = session['user_id']
+        
+        # Get investment history for the user
+        history = list(db.investment_history.find(
+            {'userId': user_id},
+            {'_id': 0}  # Exclude MongoDB _id from results
+        ).sort('createdAt', -1))  # Sort by newest first
+        
+        # Format dates and numbers
+        for entry in history:
+            entry['date'] = entry['date']
+            entry['amount'] = float(entry.get('amount', 0))
+            entry['balance'] = float(entry.get('balance', 0))
+            
+            # Remove MongoDB specific fields
+            entry.pop('createdAt', None)
+            entry.pop('userId', None)
+            
+        return jsonify({'history': history})
+    except Exception as e:
+        print(f"Error fetching investment history: {str(e)}")
+        return jsonify({'error': 'Failed to fetch investment history'}), 500
 
 # Referral routes
 @app.route('/api/referral/stats', methods=['GET'])

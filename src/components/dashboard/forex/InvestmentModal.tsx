@@ -38,18 +38,28 @@ export default function InvestmentModal({
       const response = await investmentApi.createInvestment({
         pair,
         amount: parseFloat(amount),
-        dailyROI: parseFloat(dailyROI),
+        dailyROI: parseFloat(dailyROI.toString()),
       });
       
       // Add the new investment to the list
       if (response.investment) {
-        onInvestmentCreated(response.investment);
+        if (typeof onInvestmentCreated === 'function') {
+          onInvestmentCreated(response.investment);
+        }
         onClose();
-        toast.success('Investment created successfully!');
+        toast({
+          title: "Success",
+          description: "Investment created successfully!",
+          variant: "success",
+        });
       }
     } catch (error: any) {
       console.error('Investment creation error:', error);
-      toast.error(error.message || 'Failed to create investment');
+      toast({
+        title: "Error",
+        description: error.message || 'Failed to create investment',
+        variant: "destructive",
+      });
     } finally {
       setIsLoading(false);
     }
