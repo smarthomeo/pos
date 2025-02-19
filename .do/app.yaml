@@ -5,7 +5,8 @@ services:
       branch: main
       repo_clone_url: ${GITHUB_REPO_URL}
     source_dir: backend
-    dockerfile_path: Dockerfile  # We'll create this next
+    build_command: pip install -r requirements.txt
+    run_command: gunicorn app:app -c gunicorn_config.py
     http_port: 5000
     instance_size_slug: basic-xxs
     instance_count: 1
@@ -25,7 +26,8 @@ services:
       branch: main
       repo_clone_url: ${GITHUB_REPO_URL}
     source_dir: .
-    dockerfile_path: Dockerfile.frontend  # We'll create this next
+    build_command: npm install && npm run build
+    run_command: serve -s dist
     http_port: 80
     instance_size_slug: basic-xxs
     instance_count: 1
