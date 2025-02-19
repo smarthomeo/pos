@@ -1114,6 +1114,7 @@ def get_investment_history():
                 'amount': float(entry.get('amount', 0)),
                 'type': entry.get('type', ''),
                 'balance': float(entry.get('balance', 0))
+            }
             formatted_history.append(formatted_entry)
             
         return jsonify({'history': formatted_history})
