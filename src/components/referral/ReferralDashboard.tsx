@@ -1,4 +1,3 @@
-import { useState, useEffect } from "react";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -17,7 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-
+import { useQuery } from "@tanstack/react-query";
 import { referralApi } from "@/services/api";
 
 interface ReferralStats {
@@ -32,11 +31,11 @@ interface ReferralStats {
   };
 }
 
+// Consider data fresh for 10 seconds
+const STALE_TIME = 1000 * 10;
+
 export function ReferralDashboard() {
   const { toast } = useToast();
-  const [stats, setStats] = useState<ReferralStats | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   
   // Get user data from localStorage
   const userDataString = localStorage.getItem('user');
@@ -45,29 +44,24 @@ export function ReferralDashboard() {
   
   const referralLink = `${window.location.origin}/signup?ref=${referralCode}`;
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        setIsLoading(true);
-        setError(null);
-        const response = await referralApi.getStats();
-        console.log('Referral stats response:', response);
-        setStats(response);
-      } catch (err: any) {
-        console.error('Referral stats error:', err);
-        setError(err.message || 'Failed to load referral stats');
-        toast({
-          variant: 'destructive',
-          title: 'Error',
-          description: 'Failed to load referral stats',
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchStats();
-  }, []);
+  const { data: stats, isLoading, error } = useQuery({
+    queryKey: ['referralStats'],
+    queryFn: async () => {
+      const response = await referralApi.getStats();
+      console.log('Referral stats response:', response);
+      return response as ReferralStats;
+    },
+    staleTime: STALE_TIME,
+    refetchOnWindowFocus: false,
+    onError: (err: any) => {
+      console.error('Referral stats error:', err);
+      toast({
+        variant: 'destructive',
+        title: 'Error',
+        description: 'Failed to load referral stats',
+      });
+    }
+  });
 
   const handleCopyLink = async () => {
     try {
@@ -118,7 +112,7 @@ export function ReferralDashboard() {
             <CardTitle>Error</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-destructive">{error}</p>
+            <p className="text-destructive">{(error as Error).message}</p>
             <Button onClick={() => window.location.reload()} className="mt-4">
               Try Again
             </Button>

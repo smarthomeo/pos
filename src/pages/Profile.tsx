@@ -11,14 +11,22 @@ import { useToast } from "@/hooks/use-toast";
 import { LogOut, Wallet, ArrowUpRight, ArrowDownRight, User, Phone, Gift, Calendar } from "lucide-react";
 import { useUser } from "@/hooks/use-user";
 import { authApi } from "@/services/api";
+import { useState } from "react";
+import DepositModal from "@/components/dashboard/DepositModal";
+import { WithdrawModal } from "@/components/dashboard/WithdrawModal";
 
 const Profile = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { user, mutate } = useUser();
+  const [showDepositModal, setShowDepositModal] = useState(false);
+  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
 
   const handleSignOut = async () => {
     try {
+      // Navigate first, then logout
+      navigate('/');
+      
       await authApi.logout();
       mutate(null);
       
@@ -26,9 +34,6 @@ const Profile = () => {
         title: "Signed out successfully",
         description: "You have been signed out of your account.",
       });
-
-      // Redirect to home page
-      navigate('/');
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -149,7 +154,7 @@ const Profile = () => {
             <Button 
               variant="outline" 
               className="w-full h-9 sm:h-10 text-sm sm:text-base" 
-              onClick={() => navigate('/deposit')}
+              onClick={() => setShowDepositModal(true)}
             >
               Make a Deposit
             </Button>
@@ -167,14 +172,25 @@ const Profile = () => {
             <Button 
               variant="outline" 
               className="w-full h-9 sm:h-10 text-sm sm:text-base" 
-              onClick={() => navigate('/withdraw')}
+              onClick={() => setShowWithdrawModal(true)}
             >
-              <ArrowDownRight className="mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4 text-red-500" />
               Make a Withdrawal
             </Button>
           </CardContent>
         </Card>
       </div>
+
+      <DepositModal 
+        isOpen={showDepositModal} 
+        onClose={() => setShowDepositModal(false)} 
+      />
+      
+      <WithdrawModal 
+        isOpen={showWithdrawModal}
+        onClose={() => setShowWithdrawModal(false)}
+        userBalance={user?.balance || 0}
+        userPhone={user?.phone || ''}
+      />
     </div>
   );
 };

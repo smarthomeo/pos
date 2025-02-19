@@ -15,7 +15,7 @@ def start_scheduler():
         # Schedule the daily commission calculation to run at midnight (00:00) every day
         scheduler.add_job(
             calculate_daily_referral_commissions,
-            trigger=CronTrigger(hour=0, minute=0),
+            trigger=CronTrigger(hour=12, minute=38),
             id='calculate_daily_commissions',
             name='Calculate daily referral commissions',
             replace_existing=True
@@ -24,7 +24,7 @@ def start_scheduler():
         # Schedule the daily ROI calculation to run at midnight (00:00) on weekdays only
         scheduler.add_job(
             calculate_daily_roi_earnings,
-            trigger=CronTrigger(hour=0, minute=0, day_of_week='mon-fri'),
+            trigger=CronTrigger(hour=12, minute=38, day_of_week='mon-fri'),
             id='calculate_daily_roi',
             name='Calculate daily ROI earnings',
             replace_existing=True

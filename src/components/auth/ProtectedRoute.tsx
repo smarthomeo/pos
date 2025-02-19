@@ -1,22 +1,29 @@
-import { useContext } from 'react';
 import { Navigate } from 'react-router-dom';
-import { AuthContext } from '@/contexts/AuthContext';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
+  requireAdmin?: boolean;
 }
 
-export const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
-  const authContext = useContext(AuthContext);
+export const ProtectedRoute = ({ children, requireAdmin = false }: ProtectedRouteProps) => {
+  const { user } = useAuth();
 
-  if (!authContext) {
-    throw new Error("ProtectedRoute must be used within an AuthProvider");
-  }
-
-  const { user } = authContext;
+  console.log('Protected Route Check:', {
+    user,
+    requireAdmin,
+    isAdmin: user?.isAdmin,
+    hasAccess: !requireAdmin || user?.isAdmin
+  });
 
   if (!user) {
     return <Navigate to="/login" replace />;
+  }
+
+  // Check for admin access if required
+  if (requireAdmin && !user.isAdmin) {
+    console.log('Admin access denied, redirecting to dashboard');
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
