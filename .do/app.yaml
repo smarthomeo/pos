@@ -1,0 +1,37 @@
+name: secure-auth-glass
+services:
+  - name: backend
+    git:
+      branch: main
+      repo_clone_url: ${GITHUB_REPO_URL}
+    source_dir: backend
+    dockerfile_path: Dockerfile  # We'll create this next
+    http_port: 5000
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    envs:
+      - key: MONGODB_URI
+        scope: RUN_TIME
+        value: ${MONGODB_URI}
+      - key: JWT_SECRET
+        scope: RUN_TIME
+        value: ${JWT_SECRET}
+      - key: ENVIRONMENT
+        scope: RUN_TIME
+        value: production
+
+  - name: frontend
+    git:
+      branch: main
+      repo_clone_url: ${GITHUB_REPO_URL}
+    source_dir: .
+    dockerfile_path: Dockerfile.frontend  # We'll create this next
+    http_port: 80
+    instance_size_slug: basic-xxs
+    instance_count: 1
+    routes:
+      - path: /
+    envs:
+      - key: VITE_API_URL
+        scope: BUILD_TIME
+        value: ${BACKEND_URL} 
