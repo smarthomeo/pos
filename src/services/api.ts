@@ -14,7 +14,10 @@ async function fetchApi(endpoint: string, options: ApiOptions = {}) {
   };
 
   try {
-    const response = await fetch(`${API_URL}${endpoint}`, {
+    // Remove /api prefix from endpoint if it exists
+    const cleanEndpoint = endpoint.startsWith('/api') ? endpoint.substring(4) : endpoint;
+    
+    const response = await fetch(`${API_URL}${cleanEndpoint}`, {
       method: options.method || 'GET',
       headers,
       credentials: 'include',

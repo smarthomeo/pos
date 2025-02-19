@@ -45,7 +45,7 @@ if not os.path.exists(session_dir):
 # Configure CORS
 CORS(app, 
      supports_credentials=True, 
-     origins=[os.getenv('FRONTEND_URL', 'http://localhost:5173')],
+     origins=['http://134.122.23.155'],  # Only allow your domain
      allow_headers=["Content-Type", "Authorization"],
      expose_headers=["Set-Cookie"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
@@ -56,8 +56,10 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['SESSION_FILE_DIR'] = session_dir
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_SECURE'] = False  # Set to False if not using HTTPS
 app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_DOMAIN'] = '134.122.23.155'  # Set to your domain
+app.config['SESSION_COOKIE_PATH'] = '/'
 Session(app)
 
 # MongoDB connection
@@ -1112,7 +1114,6 @@ def get_investment_history():
                 'amount': float(entry.get('amount', 0)),
                 'type': entry.get('type', ''),
                 'balance': float(entry.get('balance', 0))
-            }
             formatted_history.append(formatted_entry)
             
         return jsonify({'history': formatted_history})
