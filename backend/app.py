@@ -40,7 +40,7 @@ app.json_encoder = CustomJSONProvider
 # Configure CORS
 CORS(app, 
      supports_credentials=True, 
-     origins=['http://134.122.23.155'],  # Only allow your domain
+     origins=[os.getenv('FRONTEND_URL', 'http://localhost:5173')],
      allow_headers=["Content-Type", "Authorization"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
@@ -50,12 +50,15 @@ app.config['SESSION_TYPE'] = 'filesystem'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
 <<<<<<< HEAD
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
-app.config['SESSION_COOKIE_SECURE'] = False  # Set to False if not using HTTPS
+app.config['SESSION_COOKIE_SECURE'] = True
 app.config['SESSION_COOKIE_HTTPONLY'] = True
+<<<<<<< HEAD
 app.config['SESSION_COOKIE_DOMAIN'] = '134.122.23.155'  # Set to your domain
 app.config['SESSION_COOKIE_PATH'] = '/'
 =======
 >>>>>>> parent of feab65f (deposit, withdraw and other features)
+=======
+>>>>>>> parent of 9343a10 (deposit, withdraw and other features klo)
 Session(app)
 
 # MongoDB connection
@@ -801,9 +804,19 @@ def get_investment_history():
         
         # Format dates and numbers
         for entry in history:
+<<<<<<< HEAD
             entry['date'] = entry['date']
             entry['amount'] = float(entry.get('amount', 0))
             entry['balance'] = float(entry.get('balance', 0))
+=======
+            formatted_entry = {
+                'date': entry['date'],
+                'amount': float(entry.get('amount', 0)),
+                'type': entry.get('type', ''),
+                'balance': float(entry.get('balance', 0))
+            }
+            formatted_history.append(formatted_entry)
+>>>>>>> parent of 9343a10 (deposit, withdraw and other features klo)
             
             # Remove MongoDB specific fields
             entry.pop('createdAt', None)
