@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface Investment {
   _id: string;
@@ -28,30 +27,14 @@ interface PortfolioChartProps {
   isLoading?: boolean;
 }
 
-const CustomTooltip = ({ active, payload, label }: any) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-white p-4 rounded-lg shadow-lg border">
-        <p className="font-semibold">{label}</p>
-        {payload.map((entry: any, index: number) => (
-          <p key={index} style={{ color: entry.color }}>
-            {entry.name}: {formatCurrency(entry.value)}
-          </p>
-        ))}
-      </div>
-    );
-  }
-  return null;
-};
+function PortfolioChart({ investments = [], history = [], isLoading = false }: PortfolioChartProps) {
+  const formatCurrency = (value: number) => {
+    return value.toLocaleString('en-KE', {
+      style: 'currency',
+      currency: 'KES'
+    });
+  };
 
-const formatCurrency = (value: number) => {
-  return value.toLocaleString('en-KE', {
-    style: 'currency',
-    currency: 'KES'
-  });
-};
-
-export default function PortfolioChart({ investments = [], history = [], isLoading = false }: PortfolioChartProps) {
   if (isLoading) {
     return (
       <Card className="col-span-3">
@@ -69,24 +52,35 @@ export default function PortfolioChart({ investments = [], history = [], isLoadi
     );
   }
 
-  const formatDate = (dateString: string) => {
+  const formatDate = (dateString: string, includeTime: boolean = false) => {
     try {
       if (!dateString) return 'N/A';
       const date = new Date(dateString);
       if (isNaN(date.getTime())) return 'N/A';
 
-      return new Intl.DateTimeFormat('en-US', {
+      const options: Intl.DateTimeFormatOptions = {
         year: 'numeric',
         month: 'short',
-        day: 'numeric'
-      }).format(date);
+        day: 'numeric',
+        ...(includeTime && {
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      };
+
+      return new Intl.DateTimeFormat('en-US', options).format(date);
     } catch (error) {
       console.error('Error formatting date:', error);
       return 'N/A';
     }
   };
 
-  const processChartData = (period: 'all' | '7d' | '30d' = 'all') => {
+  const isWeekend = (date: Date) => {
+    const day = date.getDay();
+    return day === 0 || day === 6;
+  };
+
+  const processChartData = () => {
     if (!history.length) return [];
 
     // Group history by date
@@ -95,37 +89,24 @@ export default function PortfolioChart({ investments = [], history = [], isLoadi
       if (!acc[date]) {
         acc[date] = {
           date,
-          totalEarnings: 0,
-          totalInvestments: 0,
-          referralEarnings: 0
+          earnings: 0,
+          balance: item.balance
         };
       }
-      
       if (item.type === 'roi_earning') {
-        acc[date].totalEarnings += item.amount;
-      } else if (item.type === 'investment') {
-        acc[date].totalInvestments += item.amount;
-      } else if (item.type === 'referral_earning') {
-        acc[date].referralEarnings += item.amount;
+        acc[date].earnings += item.amount;
       }
-      
       return acc;
     }, {});
 
     // Convert to array and sort by date
-    let chartData = Object.values(dailyData)
+    const chartData = Object.values(dailyData)
       .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
       .map((item: any) => ({
         ...item,
-        date: formatDate(item.date)
+        date: formatDate(item.date),
+        isWeekend: isWeekend(new Date(item.date))
       }));
-
-    // Filter based on period
-    if (period === '7d') {
-      chartData = chartData.slice(-7);
-    } else if (period === '30d') {
-      chartData = chartData.slice(-30);
-    }
 
     return chartData;
   };
@@ -133,6 +114,9 @@ export default function PortfolioChart({ investments = [], history = [], isLoadi
   const chartData = processChartData();
   const totalInvestment = investments.reduce((sum, inv) => sum + inv.amount, 0);
   const totalProfit = investments.reduce((sum, inv) => sum + inv.profit, 0);
+  const averageROI = investments.length 
+    ? (investments.reduce((sum, inv) => sum + inv.dailyROI, 0) / investments.length).toFixed(2)
+    : '0.00';
 
   return (
     <Card className="col-span-3">
@@ -144,95 +128,54 @@ export default function PortfolioChart({ investments = [], history = [], isLoadi
             <p className="text-xl font-bold">{formatCurrency(totalInvestment)}</p>
           </div>
           <div>
-            <p className="text-muted-foreground">Total Earnings</p>
-            <p className={`text-xl font-bold ${totalProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(totalProfit)}
-            </p>
+            <p className="text-muted-foreground">Total Profit</p>
+            <p className="text-xl font-bold text-green-600">{formatCurrency(totalProfit)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Average Daily ROI</p>
+            <p className="text-xl font-bold">{averageROI}%</p>
           </div>
         </div>
       </CardHeader>
       <CardContent>
-        <Tabs defaultValue="all" className="space-y-4">
-          <TabsList>
-            <TabsTrigger value="all">All Time</TabsTrigger>
-            <TabsTrigger value="30d">30 Days</TabsTrigger>
-            <TabsTrigger value="7d">7 Days</TabsTrigger>
-          </TabsList>
-          <TabsContent value="all">
-            <ChartContent data={processChartData('all')} />
-          </TabsContent>
-          <TabsContent value="30d">
-            <ChartContent data={processChartData('30d')} />
-          </TabsContent>
-          <TabsContent value="7d">
-            <ChartContent data={processChartData('7d')} />
-          </TabsContent>
-        </Tabs>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={chartData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis 
+              dataKey="date" 
+              tick={{ fontSize: 12 }}
+            />
+            <YAxis 
+              tick={{ fontSize: 12 }}
+              tickFormatter={(value) => formatCurrency(value)}
+            />
+            <Tooltip
+              formatter={(value: any) => formatCurrency(Number(value))}
+              labelFormatter={(label) => `Date: ${label}`}
+              contentStyle={{ backgroundColor: '#fff', borderRadius: '8px' }}
+            />
+            <Line
+              type="monotone"
+              dataKey="balance"
+              name="Portfolio Value"
+              stroke="#2563eb"
+              strokeWidth={2}
+              dot={false}
+            />
+            <Line
+              type="monotone"
+              dataKey="earnings"
+              name="Daily Earnings"
+              stroke="#16a34a"
+              strokeWidth={2}
+              dot={false}
+              strokeDasharray={({ isWeekend }) => isWeekend ? "3 3" : "0"}
+            />
+          </LineChart>
+        </ResponsiveContainer>
       </CardContent>
     </Card>
   );
 }
 
-interface ChartContentProps {
-  data: Array<{
-    date: string;
-    totalEarnings: number;
-    totalInvestments: number;
-    referralEarnings: number;
-  }>;
-}
-
-function ChartContent({ data }: ChartContentProps) {
-  return (
-    <div>
-      <ResponsiveContainer width="100%" height={400}>
-        <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-          <XAxis 
-            dataKey="date" 
-            tick={{ fontSize: 12 }}
-            interval="preserveStartEnd"
-          />
-          <YAxis 
-            tick={{ fontSize: 12 }}
-            tickFormatter={(value) => value.toLocaleString('en-KE', {
-              style: 'currency',
-              currency: 'KES',
-              minimumFractionDigits: 0,
-              maximumFractionDigits: 0
-            })}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
-          <Line
-            type="monotone"
-            dataKey="totalInvestments"
-            name="Total Investments"
-            stroke="#2563eb"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 6, strokeWidth: 2 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="totalEarnings"
-            name="Total Earnings"
-            stroke="#16a34a"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 6, strokeWidth: 2 }}
-          />
-          <Line
-            type="monotone"
-            dataKey="referralEarnings"
-            name="Referral Earnings"
-            stroke="#f97316"
-            strokeWidth={2}
-            dot={false}
-            activeDot={{ r: 6, strokeWidth: 2 }}
-          />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-  );
-}
+export default PortfolioChart;

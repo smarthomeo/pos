@@ -37,29 +37,25 @@ app = Flask(__name__)
 # Configure JSON encoder
 app.json_encoder = CustomJSONProvider
 
-# Create session directory if it doesn't exist
-session_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'sessions')
-if not os.path.exists(session_dir):
-    os.makedirs(session_dir, exist_ok=True)
-
 # Configure CORS
 CORS(app, 
      supports_credentials=True, 
      origins=['http://134.122.23.155'],  # Only allow your domain
      allow_headers=["Content-Type", "Authorization"],
-     expose_headers=["Set-Cookie"],
      methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
 
 # Configure session
 app.config['SECRET_KEY'] = os.getenv('JWT_SECRET', 'your-secret-key')
 app.config['SESSION_TYPE'] = 'filesystem'
-app.config['SESSION_FILE_DIR'] = session_dir
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=1)
+<<<<<<< HEAD
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE'] = False  # Set to False if not using HTTPS
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_DOMAIN'] = '134.122.23.155'  # Set to your domain
 app.config['SESSION_COOKIE_PATH'] = '/'
+=======
+>>>>>>> parent of feab65f (deposit, withdraw and other features)
 Session(app)
 
 # MongoDB connection
@@ -155,138 +151,116 @@ def calculate_daily_referral_commissions():
             
         daily_rates = commission_rates['daily_commission']
         
-        # Get today's date (UTC)
-        current_time = datetime.utcnow()
-        today_start = current_time.replace(hour=0, minute=0, second=0, microsecond=0)
-        
-        print(f"Starting daily commission calculation for {current_time.date()}")
-        
-        # Get all investment history entries from today (these are the actual ROI earnings)
-        today_earnings = db.investment_history.find({
-            'type': 'roi_earning',
-            'date': current_time.date().isoformat()
-        })
+        # Get yesterday's date (UTC)
+        yesterday = datetime.utcnow() - timedelta(days=1)
+        yesterday_start = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday_end = yesterday_start + timedelta(days=1)
         
         # Track processed commissions to avoid duplicates
         processed_commissions = set()
         
-        for earning in today_earnings:
-            try:
-                user_id = earning['userId']
-                daily_roi_earnings = earning['amount']  # This is the actual ROI earned
-                
-                # Get user's referral chain
-                user = db.users.find_one({'_id': user_id})
-                if not user or not user.get('referredBy'):
-                    continue
-                
-                # Process Level 1 (direct referrer)
-                level1_referrer_id = user['referredBy']
-                commission_key = f"{str(level1_referrer_id)}_{str(user_id)}_{current_time.date()}"
-                
-                if commission_key not in processed_commissions:
-                    level1_commission = daily_roi_earnings * daily_rates['level1']
-                    
-                    # Record commission
-                    db.referral_history.insert_one({
-                        'referrerId': level1_referrer_id,
-                        'referredId': user_id,
-                        'level': 1,
-                        'type': 'daily_commission',
-                        'amount': level1_commission,
-                        'rate': daily_rates['level1'],
-                        'baseAmount': daily_roi_earnings,
-                        'date': today_start,
-                        'createdAt': current_time
-                    })
-                    
-                    # Update user's earnings and balance
-                    db.users.update_one(
-                        {'_id': level1_referrer_id},
-                        {
-                            '$inc': {
-                                'referralEarnings': level1_commission,
-                                'balance': level1_commission
-                            }
-                        }
-                    )
-                    
-                    processed_commissions.add(commission_key)
-                    print(f"Level 1 commission: {level1_commission} credited to {level1_referrer_id}")
-                    
-                    # Process Level 2
-                    level1_user = db.users.find_one({'_id': level1_referrer_id})
-                    if level1_user and level1_user.get('referredBy'):
-                        level2_referrer_id = level1_user['referredBy']
-                        level2_commission_key = f"{str(level2_referrer_id)}_{str(user_id)}_{current_time.date()}"
-                        
-                        if level2_commission_key not in processed_commissions:
-                            level2_commission = daily_roi_earnings * daily_rates['level2']
-                            
-                            db.referral_history.insert_one({
-                                'referrerId': level2_referrer_id,
-                                'referredId': user_id,
-                                'level': 2,
-                                'type': 'daily_commission',
-                                'amount': level2_commission,
-                                'rate': daily_rates['level2'],
-                                'baseAmount': daily_roi_earnings,
-                                'date': today_start,
-                                'createdAt': current_time
-                            })
-                            
-                            db.users.update_one(
-                                {'_id': level2_referrer_id},
-                                {
-                                    '$inc': {
-                                        'referralEarnings': level2_commission,
-                                        'balance': level2_commission
-                                    }
-                                }
-                            )
-                            
-                            processed_commissions.add(level2_commission_key)
-                            print(f"Level 2 commission: {level2_commission} credited to {level2_referrer_id}")
-                            
-                            # Process Level 3
-                            level2_user = db.users.find_one({'_id': level2_referrer_id})
-                            if level2_user and level2_user.get('referredBy'):
-                                level3_referrer_id = level2_user['referredBy']
-                                level3_commission_key = f"{str(level3_referrer_id)}_{str(user_id)}_{current_time.date()}"
-                                
-                                if level3_commission_key not in processed_commissions:
-                                    level3_commission = daily_roi_earnings * daily_rates['level3']
-                                    
-                                    db.referral_history.insert_one({
-                                        'referrerId': level3_referrer_id,
-                                        'referredId': user_id,
-                                        'level': 3,
-                                        'type': 'daily_commission',
-                                        'amount': level3_commission,
-                                        'rate': daily_rates['level3'],
-                                        'baseAmount': daily_roi_earnings,
-                                        'date': today_start,
-                                        'createdAt': current_time
-                                    })
-                                    
-                                    db.users.update_one(
-                                        {'_id': level3_referrer_id},
-                                        {
-                                            '$inc': {
-                                                'referralEarnings': level3_commission,
-                                                'balance': level3_commission
-                                            }
-                                        }
-                                    )
-                                    
-                                    processed_commissions.add(level3_commission_key)
-                                    print(f"Level 3 commission: {level3_commission} credited to {level3_referrer_id}")
-            
-            except Exception as e:
-                print(f"Error processing commission for earning {earning.get('_id')}: {str(e)}")
-                continue
+        # Get all active investments from yesterday
+        active_investments = db.investments.find({
+            'status': 'active',
+            'createdAt': {'$lt': yesterday_end}
+        })
         
-        print(f"Daily commission calculation completed for {current_time.date()}")
+        for investment in active_investments:
+            user_id = investment['userId']
+            amount = investment['amount']
+            daily_roi = investment.get('dailyRoi', 0)
+            daily_roi_earnings = amount * (daily_roi / 100)
+            
+            # Get user's referral chain
+            user = db.users.find_one({'_id': user_id})
+            if not user or not user.get('referredBy'):
+                continue
+                
+            # Process Level 1 (direct referrer)
+            level1_referrer_id = user['referredBy']
+            commission_key = f"{str(level1_referrer_id)}_{str(user_id)}_{yesterday.date()}"
+            
+            if commission_key not in processed_commissions:
+                level1_commission = daily_roi_earnings * daily_rates['level1']
+                
+                # Record commission with historical rate
+                db.referral_history.insert_one({
+                    'referrerId': level1_referrer_id,
+                    'referredId': user_id,
+                    'level': 1,
+                    'type': 'daily_commission',
+                    'amount': level1_commission,
+                    'rate': daily_rates['level1'],
+                    'baseAmount': daily_roi_earnings,
+                    'date': yesterday_start,
+                    'createdAt': datetime.utcnow()
+                })
+                
+                # Update user's earnings
+                db.users.update_one(
+                    {'_id': level1_referrer_id},
+                    {'$inc': {'referralEarnings': level1_commission}}
+                )
+                
+                processed_commissions.add(commission_key)
+                
+                # Process Level 2
+                level1_user = db.users.find_one({'_id': level1_referrer_id})
+                if level1_user and level1_user.get('referredBy'):
+                    level2_referrer_id = level1_user['referredBy']
+                    level2_commission_key = f"{str(level2_referrer_id)}_{str(user_id)}_{yesterday.date()}"
+                    
+                    if level2_commission_key not in processed_commissions:
+                        level2_commission = daily_roi_earnings * daily_rates['level2']
+                        
+                        db.referral_history.insert_one({
+                            'referrerId': level2_referrer_id,
+                            'referredId': user_id,
+                            'level': 2,
+                            'type': 'daily_commission',
+                            'amount': level2_commission,
+                            'rate': daily_rates['level2'],
+                            'baseAmount': daily_roi_earnings,
+                            'date': yesterday_start,
+                            'createdAt': datetime.utcnow()
+                        })
+                        
+                        db.users.update_one(
+                            {'_id': level2_referrer_id},
+                            {'$inc': {'referralEarnings': level2_commission}}
+                        )
+                        
+                        processed_commissions.add(level2_commission_key)
+                        
+                        # Process Level 3
+                        level2_user = db.users.find_one({'_id': level2_referrer_id})
+                        if level2_user and level2_user.get('referredBy'):
+                            level3_referrer_id = level2_user['referredBy']
+                            level3_commission_key = f"{str(level3_referrer_id)}_{str(user_id)}_{yesterday.date()}"
+                            
+                            if level3_commission_key not in processed_commissions:
+                                level3_commission = daily_roi_earnings * daily_rates['level3']
+                                
+                                db.referral_history.insert_one({
+                                    'referrerId': level3_referrer_id,
+                                    'referredId': user_id,
+                                    'level': 3,
+                                    'type': 'daily_commission',
+                                    'amount': level3_commission,
+                                    'rate': daily_rates['level3'],
+                                    'baseAmount': daily_roi_earnings,
+                                    'date': yesterday_start,
+                                    'createdAt': datetime.utcnow()
+                                })
+                                
+                                db.users.update_one(
+                                    {'_id': level3_referrer_id},
+                                    {'$inc': {'referralEarnings': level3_commission}}
+                                )
+                                
+                                processed_commissions.add(level3_commission_key)
+        
+        print(f"Daily commission calculation completed for {yesterday.date()}")
         
     except Exception as e:
         print(f"Error calculating daily commissions: {str(e)}")
@@ -362,185 +336,6 @@ def calculate_daily_roi_earnings():
     except Exception as e:
         print(f"Error calculating daily ROI: {str(e)}")
         return False
-
-# Admin routes
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return jsonify({'error': 'Authentication required'}), 401
-            
-        user = db.users.find_one({'_id': ObjectId(session['user_id'])})
-        if not user or not user.get('isAdmin', False):
-            return jsonify({'error': 'Admin access required'}), 403
-            
-        return f(*args, **kwargs)
-    return decorated_function
-
-@app.route('/admin/transactions/pending', methods=['GET'])
-@admin_required
-def get_pending_transactions():
-    try:
-        # Get all pending transactions with user details
-        pipeline = [
-            {
-                '$match': {
-                    'status': 'pending'
-                }
-            },
-            {
-                '$lookup': {
-                    'from': 'users',
-                    'localField': 'user_id',
-                    'foreignField': '_id',
-                    'as': 'user'
-                }
-            },
-            {
-                '$unwind': '$user'
-            },
-            {
-                '$project': {
-                    '_id': 1,
-                    'type': 1,
-                    'amount': 1,
-                    'status': 1,
-                    'createdAt': 1,
-                    'username': '$user.username',
-                    'phone': '$user.phone'
-                }
-            }
-        ]
-        
-        transactions = list(db.transactions.aggregate(pipeline))
-        
-        # Format the transactions for JSON serialization
-        formatted_transactions = []
-        for transaction in transactions:
-            formatted_transaction = {
-                '_id': str(transaction['_id']),
-                'type': transaction['type'],
-                'amount': float(transaction['amount']),
-                'status': transaction['status'],
-                'createdAt': transaction['createdAt'].isoformat() if isinstance(transaction.get('createdAt'), datetime) else str(transaction.get('createdAt', '')),
-                'username': transaction['username'],
-                'phone': transaction['phone']
-            }
-            formatted_transactions.append(formatted_transaction)
-            
-        return jsonify({'transactions': formatted_transactions})
-    except Exception as e:
-        print(f"Error fetching pending transactions: {str(e)}")
-        return jsonify({'error': 'Failed to fetch pending transactions'}), 500
-
-@app.route('/admin/verifications/pending', methods=['GET'])
-@admin_required
-def get_pending_verifications():
-    try:
-        # Get users pending verification
-        users = list(db.users.find(
-            {'isVerified': {'$ne': True}},
-            {
-                'password': 0,  # Exclude password from results
-                'balance': 0,   # Exclude balance for security
-            }
-        ))
-        
-        # Format users for response
-        formatted_users = []
-        for user in users:
-            formatted_user = {
-                '_id': str(user['_id']),
-                'username': user.get('username', ''),
-                'phone': user.get('phone', ''),
-                'isVerified': user.get('isVerified', False),
-                'isActive': user.get('isActive', True),
-                'createdAt': user.get('createdAt', datetime.utcnow()).isoformat() if isinstance(user.get('createdAt'), datetime) else str(user.get('createdAt', '')),
-                'updatedAt': user.get('updatedAt', datetime.utcnow()).isoformat() if isinstance(user.get('updatedAt'), datetime) else str(user.get('updatedAt', ''))
-            }
-            if user.get('referredBy'):
-                formatted_user['referredBy'] = str(user['referredBy'])
-            formatted_users.append(formatted_user)
-            
-        return jsonify({'verifications': formatted_users})
-    except Exception as e:
-        print(f"Error fetching pending verifications: {str(e)}")
-        return jsonify({'error': 'Failed to fetch pending verifications'}), 500
-
-@app.route('/admin/transactions/<transaction_id>/approve', methods=['POST'])
-@admin_required
-def approve_transaction(transaction_id):
-    try:
-        # Find and update the transaction
-        transaction = db.transactions.find_one_and_update(
-            {'_id': ObjectId(transaction_id), 'status': 'pending'},
-            {'$set': {'status': 'approved', 'approvedAt': datetime.utcnow()}},
-            return_document=True
-        )
-        
-        if not transaction:
-            return jsonify({'error': 'Transaction not found or already processed'}), 404
-            
-        # Update user balance based on transaction type
-        if transaction['type'] == 'deposit':
-            db.users.update_one(
-                {'_id': ObjectId(transaction['user_id'])},
-                {'$inc': {'balance': transaction['amount']}}
-            )
-        elif transaction['type'] == 'withdrawal':
-            # Deduct the amount for withdrawals
-            db.users.update_one(
-                {'_id': ObjectId(transaction['user_id'])},
-                {'$inc': {'balance': -transaction['amount']}}
-            )
-            
-        return jsonify({'message': 'Transaction approved successfully'})
-    except Exception as e:
-        print(f"Error approving transaction: {str(e)}")
-        return jsonify({'error': 'Failed to approve transaction'}), 500
-
-@app.route('/admin/transactions/<transaction_id>/reject', methods=['POST'])
-@admin_required
-def reject_transaction(transaction_id):
-    try:
-        # Find and update the transaction
-        transaction = db.transactions.find_one_and_update(
-            {'_id': ObjectId(transaction_id), 'status': 'pending'},
-            {'$set': {'status': 'rejected', 'rejectedAt': datetime.utcnow()}},
-            return_document=True
-        )
-        
-        if not transaction:
-            return jsonify({'error': 'Transaction not found or already processed'}), 404
-            
-        return jsonify({'message': 'Transaction rejected successfully'})
-    except Exception as e:
-        print(f"Error rejecting transaction: {str(e)}")
-        return jsonify({'error': 'Failed to reject transaction'}), 500
-
-@app.route('/admin/users/<user_id>/verify', methods=['POST'])
-@admin_required
-def verify_user(user_id):
-    try:
-        # Find and update the user
-        user = db.users.find_one_and_update(
-            {'_id': ObjectId(user_id)},
-            {
-                '$set': {
-                    'isVerified': True,
-                    'verifiedAt': datetime.utcnow()
-                }
-            },
-            return_document=True
-        )
-        
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-            
-        return jsonify({'message': 'User verified successfully'})
-    except Exception as e:
-        print(f"Error verifying user: {str(e)}")
-        return jsonify({'error': 'Failed to verify user'}), 500
 
 # Auth routes
 @app.route('/api/auth/register', methods=['POST'])
@@ -629,7 +424,6 @@ def login():
             'balance': user.get('balance', 0),
             'referralCode': user['referralCode'],
             'isActive': user.get('isActive', True),
-            'isAdmin': user.get('isAdmin', False),
             'createdAt': user['createdAt'].isoformat() if isinstance(user['createdAt'], datetime) else user['createdAt'],
             'updatedAt': user['updatedAt'].isoformat() if isinstance(user['updatedAt'], datetime) else user['updatedAt']
         }
@@ -661,7 +455,6 @@ def verify():
             'phone': user['phone'],
             'balance': user.get('balance', 0),
             'referralCode': user['referralCode'],
-            'isAdmin': user.get('isAdmin', False),
             'isActive': user.get('isActive', True),
             'createdAt': user['createdAt'].isoformat() if isinstance(user['createdAt'], datetime) else user['createdAt'],
             'updatedAt': user['updatedAt'].isoformat() if isinstance(user['updatedAt'], datetime) else user['updatedAt']
@@ -678,24 +471,8 @@ def verify():
 @app.route('/api/auth/logout', methods=['POST'])
 def logout():
     try:
-        # Clear the session
         session.clear()
-        
-        # Create response
-        response = jsonify({'message': 'Logged out successfully'})
-        
-        # Clear session cookie with proper settings
-        response.set_cookie(
-            'session',
-            '',
-            expires=0,
-            path='/',
-            secure=True,
-            httponly=True,
-            samesite='Lax'
-        )
-        
-        return response
+        return jsonify({'message': 'Logged out successfully'})
     except Exception as e:
         print(f"Logout error: {str(e)}")
         return jsonify({'error': 'Logout failed'}), 500
@@ -723,114 +500,30 @@ def update_profile():
 @app.route('/api/transactions', methods=['GET'])
 @login_required
 def get_transactions():
-    try:
-        # Get all transactions for the user
-        transactions = list(db.transactions.find({
-            'user_id': ObjectId(session['user_id'])
-        }).sort('createdAt', -1))  # Sort by newest first
-        
-        # Format transactions for response
-        formatted_transactions = []
-        for transaction in transactions:
-            formatted_transaction = {
-                '_id': str(transaction['_id']),
-                'user_id': str(transaction['user_id']),
-                'type': transaction['type'],
-                'amount': float(transaction['amount']),
-                'status': transaction['status'],
-                'createdAt': transaction['createdAt'].isoformat() if isinstance(transaction.get('createdAt'), datetime) else str(transaction.get('createdAt', '')),
-                'updatedAt': transaction.get('updatedAt', '').isoformat() if isinstance(transaction.get('updatedAt'), datetime) else str(transaction.get('updatedAt', ''))
-            }
-            formatted_transactions.append(formatted_transaction)
-            
-        return jsonify({'transactions': formatted_transactions})
-    except Exception as e:
-        print(f"Error fetching transactions: {str(e)}")
-        return jsonify({'error': 'Failed to fetch transactions'}), 500
+    transactions = list(db.transactions.find({'user_id': session['user_id']}))
+    for t in transactions:
+        t['_id'] = str(t['_id'])
+    return jsonify({'transactions': transactions})
 
 @app.route('/api/transactions/deposit', methods=['POST'])
 @login_required
 def initiate_deposit():
-    try:
-        data = request.get_json()
-        amount = float(data.get('amount', 0))
-        
-        if not amount or amount <= 0:
-            return jsonify({'error': 'Invalid amount'}), 400
-        
-        current_time = datetime.utcnow()
-        transaction = {
-            'user_id': ObjectId(session['user_id']),
-            'type': 'deposit',
-            'amount': amount,
-            'status': 'pending',
-            'createdAt': current_time,
-            'updatedAt': current_time
-        }
-        
-        result = db.transactions.insert_one(transaction)
-        
-        # Format response
-        transaction_response = {
-            '_id': str(result.inserted_id),
-            'user_id': session['user_id'],
-            'type': 'deposit',
-            'amount': amount,
-            'status': 'pending',
-            'createdAt': current_time.isoformat(),
-            'updatedAt': current_time.isoformat()
-        }
-        
-        return jsonify({'transaction': transaction_response})
-    except Exception as e:
-        print(f"Deposit error: {str(e)}")
-        return jsonify({'error': 'Failed to create deposit'}), 500
-
-@app.route('/api/transactions/withdraw', methods=['POST'])
-@login_required
-def initiate_withdrawal():
-    try:
-        data = request.get_json()
-        amount = float(data.get('amount', 0))
-        
-        if not amount or amount <= 0:
-            return jsonify({'error': 'Invalid amount'}), 400
-            
-        # Get user to check balance
-        user = db.users.find_one({'_id': ObjectId(session['user_id'])})
-        if not user:
-            return jsonify({'error': 'User not found'}), 404
-            
-        if amount > user.get('balance', 0):
-            return jsonify({'error': 'Insufficient balance'}), 400
-            
-        current_time = datetime.utcnow()
-        transaction = {
-            'user_id': ObjectId(session['user_id']),
-            'type': 'withdrawal',
-            'amount': amount,
-            'status': 'pending',
-            'createdAt': current_time,
-            'updatedAt': current_time
-        }
-        
-        result = db.transactions.insert_one(transaction)
-        
-        # Format response
-        transaction_response = {
-            '_id': str(result.inserted_id),
-            'user_id': session['user_id'],
-            'type': 'withdrawal',
-            'amount': amount,
-            'status': 'pending',
-            'createdAt': current_time.isoformat(),
-            'updatedAt': current_time.isoformat()
-        }
-        
-        return jsonify({'transaction': transaction_response})
-    except Exception as e:
-        print(f"Withdrawal error: {str(e)}")
-        return jsonify({'error': 'Failed to create withdrawal'}), 500
+    data = request.get_json()
+    amount = data.get('amount')
+    
+    if not amount or amount <= 0:
+        return jsonify({'error': 'Invalid amount'}), 400
+    
+    transaction = {
+        'user_id': session['user_id'],
+        'type': 'deposit',
+        'amount': amount,
+        'status': 'pending'
+    }
+    
+    result = db.transactions.insert_one(transaction)
+    transaction['_id'] = str(result.inserted_id)
+    return jsonify({'transaction': transaction})
 
 @app.route('/api/transactions/deposit/<transaction_id>/confirm', methods=['POST'])
 @login_required
@@ -1102,22 +795,21 @@ def get_investment_history():
         
         # Get investment history for the user
         history = list(db.investment_history.find(
-            {'userId': ObjectId(user_id)},
+            {'userId': user_id},
             {'_id': 0}  # Exclude MongoDB _id from results
         ).sort('createdAt', -1))  # Sort by newest first
         
         # Format dates and numbers
-        formatted_history = []
         for entry in history:
-            formatted_entry = {
-                'date': entry['date'],
-                'amount': float(entry.get('amount', 0)),
-                'type': entry.get('type', ''),
-                'balance': float(entry.get('balance', 0))
-            }
-            formatted_history.append(formatted_entry)
+            entry['date'] = entry['date']
+            entry['amount'] = float(entry.get('amount', 0))
+            entry['balance'] = float(entry.get('balance', 0))
             
-        return jsonify({'history': formatted_history})
+            # Remove MongoDB specific fields
+            entry.pop('createdAt', None)
+            entry.pop('userId', None)
+            
+        return jsonify({'history': history})
     except Exception as e:
         print(f"Error fetching investment history: {str(e)}")
         return jsonify({'error': 'Failed to fetch investment history'}), 500
@@ -1186,20 +878,19 @@ def get_referral_history():
         # Get level 1 (direct) referrals
         level1_refs = list(db.users.find({'referredBy': ObjectId(user_id)}))
         for ref in level1_refs:
-            # Get one-time rewards for this referral
+            # Get earnings for this referral
             one_time_rewards = sum(reward.get('amount', 0) 
                 for reward in db.referral_history.find({
                     'referrerId': ObjectId(user_id),
-                    'userId': ref['_id'],  # Changed from userId to referredId
+                    'userId': ref['_id'],  
                     'type': 'one_time_reward'
                 })
             )
             
-            # Get daily commissions for this referral
             daily_commissions = sum(reward.get('amount', 0)
                 for reward in db.referral_history.find({
                     'referrerId': ObjectId(user_id),
-                    'referredId': ref['_id'],  # Changed from userId to referredId
+                    'userId': ref['_id'],  
                     'type': 'daily_commission'
                 })
             )
@@ -1225,7 +916,7 @@ def get_referral_history():
                 l2_one_time = sum(reward.get('amount', 0)
                     for reward in db.referral_history.find({
                         'referrerId': ObjectId(user_id),
-                        'referredId': l2_ref['_id'],  # Changed from userId to referredId
+                        'userId': l2_ref['_id'],  
                         'type': 'one_time_reward'
                     })
                 )
@@ -1233,7 +924,7 @@ def get_referral_history():
                 l2_daily = sum(reward.get('amount', 0)
                     for reward in db.referral_history.find({
                         'referrerId': ObjectId(user_id),
-                        'referredId': l2_ref['_id'],  # Changed from userId to referredId
+                        'userId': l2_ref['_id'],  
                         'type': 'daily_commission'
                     })
                 )
@@ -1259,7 +950,7 @@ def get_referral_history():
                     l3_one_time = sum(reward.get('amount', 0)
                         for reward in db.referral_history.find({
                             'referrerId': ObjectId(user_id),
-                            'referredId': l3_ref['_id'],  # Changed from userId to referredId
+                            'userId': l3_ref['_id'],  
                             'type': 'one_time_reward'
                         })
                     )
@@ -1267,7 +958,7 @@ def get_referral_history():
                     l3_daily = sum(reward.get('amount', 0)
                         for reward in db.referral_history.find({
                             'referrerId': ObjectId(user_id),
-                            'referredId': l3_ref['_id'],  # Changed from userId to referredId
+                            'userId': l3_ref['_id'],  
                             'type': 'daily_commission'
                         })
                     )

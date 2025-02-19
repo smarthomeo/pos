@@ -24,15 +24,15 @@ interface TransactionTableProps {
 
 function TransactionTable({ transactions }: TransactionTableProps) {
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case 'approved':
-        return 'bg-green-500/10 text-green-500 border-green-500/20';
-      case 'rejected':
-        return 'bg-red-500/10 text-red-500 border-red-500/20';
+    switch (status) {
+      case 'completed':
+        return 'bg-green-500';
       case 'pending':
-        return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
+        return 'bg-yellow-500';
+      case 'failed':
+        return 'bg-red-500';
       default:
-        return 'bg-gray-500/10 text-gray-500 border-gray-500/20';
+        return 'bg-gray-500';
     }
   };
 
@@ -107,8 +107,8 @@ function TransactionTable({ transactions }: TransactionTableProps) {
                 </TableCell>
                 <TableCell className="whitespace-nowrap text-xs sm:text-sm py-2 sm:py-4">
                   <Badge 
-                    className={`${getStatusColor(transaction.status)} border`}
-                    variant="outline"
+                    variant="secondary" 
+                    className={`${getStatusColor(transaction.status)} text-xs whitespace-nowrap px-2 py-0.5`}
                   >
                     {transaction.status}
                   </Badge>

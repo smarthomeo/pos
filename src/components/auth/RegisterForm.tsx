@@ -8,7 +8,6 @@ import { useToast } from "@/hooks/use-toast";
 import { AuthContext } from "@/contexts/AuthContext";
 import PhoneInput from "react-phone-number-input";
 import "react-phone-number-input/style.css";
-import { authApi } from "@/services/api";
 
 interface FormValues {
   username: string;
@@ -41,11 +40,13 @@ interface RegisterFormProps {
 const RegisterForm = ({ defaultReferralCode }: RegisterFormProps) => {
   const { toast } = useToast();
   const navigate = useNavigate();
-  const { login } = useContext(AuthContext) || {};
+  const authContext = useContext(AuthContext);
 
-  if (!login) {
+  if (!authContext) {
     throw new Error("RegisterForm must be used within an AuthProvider");
   }
+
+  const { setUser } = authContext;
 
   const initialValues: FormValues = {
     username: "",
@@ -57,16 +58,40 @@ const RegisterForm = ({ defaultReferralCode }: RegisterFormProps) => {
 
   const handleSubmit = async (values: FormValues) => {
     try {
-      // Register the user
-      const response = await authApi.register({
-        username: values.username,
-        phone: values.phone,
-        password: values.password,
-        referralCode: values.referralCode,
+      const response = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'}/api/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: values.username,
+          phone: values.phone,
+          password: values.password,
+          referralCode: values.referralCode,
+        }),
+        credentials: "include",
       });
 
-      // Log the user in
-      await login(values.phone, values.password);
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to register");
+      }
+
+      // Store user data in context
+      const userData = {
+        _id: data.user._id,
+        phone: data.user.phone,
+        username: data.user.username,
+        balance: data.user.balance || 0,
+        referralCode: data.user.referralCode,
+        createdAt: data.user.createdAt,
+        updatedAt: data.user.updatedAt,
+        email: data.user.email || ""
+      };
+
+      localStorage.setItem("user", JSON.stringify(userData));
+      setUser(userData);
       
       toast({
         title: "Success",

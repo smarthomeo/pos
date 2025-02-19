@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   Table,
   TableBody,
@@ -17,7 +18,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { useQuery } from "@tanstack/react-query";
 
 interface ReferralRecord {
   _id: string;
@@ -34,45 +34,51 @@ interface ReferralRecord {
   };
 }
 
-// Consider data fresh for 10 seconds
-const STALE_TIME = 1000 * 10;
-
 export function ReferralTable() {
   const { toast } = useToast();
+  const [referrals, setReferrals] = useState<ReferralRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const { data: referrals = [], isLoading, error } = useQuery({
-    queryKey: ['referralHistory'],
-    queryFn: async () => {
-      const response = await referralApi.getHistory();
-      if (response && Array.isArray(response.referrals)) {
-        return response.referrals.map((ref: any) => ({
-          _id: ref._id || ref.id,
-          username: ref.username || '',
-          phone: ref.phone || '',
-          joinedAt: ref.joinedAt || new Date().toISOString(),
-          isActive: ref.isActive || false,
-          referralCount: ref.referralCount || 0,
-          level: ref.level || 1,
-          earnings: {
-            oneTimeRewards: ref.earnings?.oneTimeRewards || 0,
-            dailyCommissions: ref.earnings?.dailyCommissions || 0,
-            total: ref.earnings?.total || 0
-          }
-        }));
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        const response = await referralApi.getHistory();
+        if (response && Array.isArray(response.referrals)) {
+          setReferrals(response.referrals.map((ref: any) => ({
+            _id: ref._id || ref.id,
+            username: ref.username || '',
+            phone: ref.phone || '',
+            joinedAt: ref.joinedAt || new Date().toISOString(),
+            isActive: ref.isActive || false,
+            referralCount: ref.referralCount || 0,
+            level: ref.level || 1,
+            earnings: {
+              oneTimeRewards: ref.earnings?.oneTimeRewards || 0,
+              dailyCommissions: ref.earnings?.dailyCommissions || 0,
+              total: ref.earnings?.total || 0
+            }
+          })));
+        } else {
+          setReferrals([]);
+        }
+      } catch (err: any) {
+        console.error('Referral history error:', err);
+        setError(err.message || 'Failed to load referral history');
+        toast({
+          variant: 'destructive',
+          title: 'Error',
+          description: 'Failed to load referral history',
+        });
+      } finally {
+        setIsLoading(false);
       }
-      return [];
-    },
-    staleTime: STALE_TIME,
-    refetchOnWindowFocus: false,
-    onError: (err: any) => {
-      console.error('Referral history error:', err);
-      toast({
-        variant: 'destructive',
-        title: 'Error',
-        description: 'Failed to load referral history',
-      });
-    }
-  });
+    };
+
+    fetchHistory();
+  }, [toast]);
 
   if (isLoading) {
     return (
@@ -87,7 +93,7 @@ export function ReferralTable() {
   if (error) {
     return (
       <div className="text-red-500">
-        Error: {(error as Error).message}
+        Error: {error}
       </div>
     );
   }
@@ -139,7 +145,7 @@ export function ReferralTable() {
               </TableCell>
               <TableCell className="text-right">
                 <div className="flex flex-col items-end">
-                  <span className="font-medium">KES {referral.earnings.total.toLocaleString()}</span>
+                  <span className="font-medium">${referral.earnings.total.toFixed(2)}</span>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -150,10 +156,10 @@ export function ReferralTable() {
                       <TooltipContent>
                         <div className="space-y-1">
                           <div className="text-xs">
-                            One-time: KES {referral.earnings.oneTimeRewards.toLocaleString()}
+                            One-time: ${referral.earnings.oneTimeRewards.toFixed(2)}
                           </div>
                           <div className="text-xs">
-                            Daily: KES {referral.earnings.dailyCommissions.toLocaleString()}
+                            Daily: ${referral.earnings.dailyCommissions.toFixed(2)}
                           </div>
                         </div>
                       </TooltipContent>
